@@ -1,0 +1,6 @@
+[submodule "lib/test"]
+	path = lib/test
+	url = https://github.com/hoblang/test
+[submodule "lib/thread"]
+	path = lib/thread
+	url = https://github.com/hoblang/thread

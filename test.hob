@@ -1,0 +1,58 @@
+import std;
+import io;
+import os;
+import test;
+import thread;
+
+import "lib.hob" as epoll;
+
+extern fun usleep(us: i32) -> i32;
+
+global fun main() -> i32 {
+    return os.mainWithoutArgs(fun () {
+        test.case("socket pair", fun () {
+            var ep = epoll.new(10).unwrap();
+            defer ep.free();
+
+            var pair = io.socket.createIpcPair().unwrap();
+            defer pair.close();
+
+            pair[0].setNonBlocking().unwrap();
+            pair[1].setNonBlocking().unwrap();
+
+            ep.add(pair[0], epoll.events().out()).unwrap();
+
+            var allowed = ep.wait(0).unwrap();
+            std.panic.assert(allowed.length == 1, "should be 1 socket avaibable for write on start");
+
+            ep.add(pair[1], epoll.events().out()).unwrap();
+
+            allowed = ep.wait(0).unwrap();
+            std.panic.assert(allowed.length == 2, "should be 2 sockets avaibable for write");
+
+            ep.delete(pair[0]).unwrap();
+            ep.delete(pair[1]).unwrap();
+            ep.add(pair[1], epoll.events().input()).unwrap();
+
+            allowed = ep.wait(0).unwrap();
+            std.panic.assert(allowed.length == 0, "should be 0 socket avaibable for read");
+
+            final t = thread.new.<io.socket.SocketPair, std.None>(fun (pair) {
+                pair[1].close();
+                usleep(5000);
+                var e: [8]u8;
+                pair[0].putString(std.slice.new.<u8>(&e[0], e.length) as string);
+                return std.none();
+            }, pair).unwrap();
+            pair[0].close();
+
+            allowed = ep.wait(100).unwrap();
+            std.panic.assert(allowed.length == 1, "should be 1 socket avaibable for read");
+
+            t.join().unwrap();
+
+            return true;
+        });
+        return 0;
+    });
+}

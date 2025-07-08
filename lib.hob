@@ -1,0 +1,65 @@
+import c;
+import io;
+import result;
+import list;
+import std;
+
+import "src/bindings.hob" as bindings;
+
+use result.{ Result, NoneResult };
+use list.List;
+use std.slice.Slice;
+public use bindings.{ Event, Events, events };
+
+type Epoll = struct {
+    fd: bindings.Fd,
+    events: List.<Event>,
+};
+
+public fun new(size: usize) -> Result.<Epoll> {
+    return c.err.handleMapped.<bindings.Fd>(bindings.create(0), fun (value) {
+        return value as bindings.Fd;
+    }).mapWith.<usize, Epoll>(size, fun (size, epoll) {
+        return {
+            events: list.newSized.<Event>(size),
+            fd: epoll,
+        };
+    });
+}
+
+public fun Epoll.add(&self, fd: io.fd.Fd, events: Events) -> NoneResult {
+    var event: Event = {
+        events: events,
+        fd: fd,
+    };
+    return c.err.handleNone(self.fd.ctl(bindings.Operation.add, fd, &event));
+}
+
+public fun Epoll.modify(&self, fd: io.fd.Fd, events: Events) -> NoneResult {
+    var event: Event = {
+        events: events,
+        fd: undefined,
+    };
+    return c.err.handleNone(self.fd.ctl(bindings.Operation.mod, fd, &event));
+}
+
+public fun Epoll.delete(&self, fd: io.fd.Fd) -> NoneResult {
+    return c.err.handleNone(self.fd.ctl(bindings.Operation.del, fd, std.null.<Event>()));
+}
+
+public fun Epoll.wait(&self, timeout: i32) -> Result.<(Slice.<Event>)> {
+    var res: i32;
+    do {
+        res = self.fd.wait(self.events.atRef(0), self.events.length() as ?, timeout);
+    } while c.errno().* == c.Errno.eintr as i32;
+    return c.err.handle(res)
+        .mapWith.<(Slice.<Event>), (Slice.<Event>)>(self.events.data, fun (full, length) {
+            full.length = length as ?;
+            return full;
+        });
+}
+
+public fun Epoll.free(self) {
+    self.fd.close();
+    self.events.free();
+}

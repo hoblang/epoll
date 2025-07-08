@@ -1,0 +1,38 @@
+import io;
+
+public type Fd = io.fd.Fd;
+
+public type Events = u32;
+
+public fun events() -> Events { return 0 as ?; }
+fun Events.or(self, value: u32) -> Events { return (self as u32 | value) as ?; }
+public fun Events.input(self) -> Events { return self.or(0x001); }
+public fun Events.pri(self) -> Events { return self.or(0x002); }
+public fun Events.out(self) -> Events { return self.or(0x004); }
+public fun Events.rdnorm(self) -> Events { return self.or(0x040); }
+public fun Events.rdband(self) -> Events { return self.or(0x080); }
+public fun Events.wrnorm(self) -> Events { return self.or(0x100); }
+public fun Events.wrband(self) -> Events { return self.or(0x200); }
+public fun Events.msg(self) -> Events { return self.or(0x400); }
+public fun Events.err(self) -> Events { return self.or(0x008); }
+public fun Events.hup(self) -> Events { return self.or(0x010); }
+public fun Events.rdhup(self) -> Events { return self.or(0x2000); }
+public fun Events.exclusive(self) -> Events { return self.or(1 << 28); }
+public fun Events.wakeup(self) -> Events { return self.or(1 << 29); }
+public fun Events.oneshot(self) -> Events { return self.or(1 << 30); }
+public fun Events.et(self) -> Events { return self.or(1 << 31); }
+
+public type Event = struct {
+    events: Events,
+    fd: io.fd.Fd,
+};
+
+public type Operation = enum (i32) {
+    add = 1,
+    del,
+    mod, 
+};
+
+public extern(epoll_create1) fun create(size: i32) -> Fd;
+public extern(epoll_ctl) fun Fd.ctl(self, op: Operation, fd: io.fd.Fd, event: *Event) -> i32;
+public extern(epoll_wait) fun Fd.wait(self, events: *Event, count: i32, timeout: i32) -> i32;
